@@ -1,0 +1,3 @@
+rootProject.name = 'grails3jwt'
+include 'grails-security-stateless'
+

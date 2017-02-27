@@ -1,0 +1,97 @@
+package net.kaleidos.grails.plugin.security.stateless.token
+
+import net.kaleidos.grails.plugin.security.stateless.CryptoService
+
+import spock.lang.Specification
+import spock.lang.Unroll
+
+import net.kaleidos.grails.plugin.security.stateless.exception.StatelessValidationException
+import net.kaleidos.grails.plugin.security.stateless.provider.UserSaltProvider
+
+class LegacyStatelessTokenProviderSpec extends Specification {
+    def tokenProvider
+
+    def setup() {
+        tokenProvider = new LegacyStatelessTokenProvider()
+        tokenProvider.cryptoService = new CryptoService()
+        tokenProvider.cryptoService.init 'secret'
+    }
+
+    @Unroll
+    void "generate a token and then extract it [salt=#salt]"() {
+        setup:
+            def username = 'palba'
+            def token = tokenProvider.generateToken(username, salt)
+
+        when:
+            def data = tokenProvider.validateAndExtractToken(token)
+
+        then:
+            data.username == 'palba'
+            data.extradata == [:]
+            data.issued_at != null
+            data.salt == salt
+
+        where:
+            salt << ["salt", null]
+    }
+
+    void "generate a token with extra data"() {
+        setup:
+            def username = 'palba'
+            def extraData = ['token1':'AAA', 'token2':'BBB']
+            def token = tokenProvider.generateToken(username, salt, extraData)
+
+        when:
+            def data = tokenProvider.validateAndExtractToken(token)
+
+        then:
+            data.username == 'palba'
+            data.extradata['token1'] == 'AAA'
+            data.extradata['token2'] == 'BBB'
+            data.issued_at != null
+            data.salt == salt
+
+        where:
+            salt = "salt"
+    }
+
+    void "Can't extract token with an invalid salt"() {
+        setup:
+            def username = 'palba'
+            def extraData = ['token1':'AAA', 'token2':'BBB']
+            def token = tokenProvider.generateToken(username, salt1, extraData)
+
+        when:
+            def data = tokenProvider.validateAndExtractToken(token, salt2)
+
+        then:
+            thrown(RuntimeException)
+
+        where:
+            salt1 = "salt"
+            salt2 = "salt2"
+    }
+
+    void "Try to extract invalid token"() {
+        setup:
+            def token = "XXXXXXXXXXXX"
+
+        when:
+            def data = tokenProvider.validateAndExtractToken(token)
+
+        then:
+            thrown(RuntimeException)
+    }
+
+    void "Try to extract null token"() {
+        given: 'a null token'
+            def token = null
+
+        when: 'trying to validate and extract the token'
+            def data = tokenProvider.validateAndExtractToken(token)
+
+        then: 'an exception must be thrown'
+            thrown(StatelessValidationException)
+    }
+}
